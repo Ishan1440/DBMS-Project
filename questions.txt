@@ -1,0 +1,135 @@
+1. Count the number of books published before 2020 whose author's first name starts with a vowel.
+SELECT 
+                COUNT(ISBN)
+            FROM Book b
+            NATURAL JOIN AuthoredBy ab
+            NATURAL JOIN Author a
+            NATURAL JOIN PublishedBy pb
+            WHERE SUBSTR(FirstName, 1, 1) in ('A', 'E', 'I', 'O', 'U') AND Year < 2020
+
+2. Display the books that have not been returned as of today with genres Comedy and Horror
+SELECT 
+                b.BorrowID,
+                bk.Title AS "Book Title",
+                b.MEMBERID,
+                g.GenreName
+            FROM Borrowing b
+            NATURAL JOIN BelongsToGenre btg
+            NATURAL JOIN Genre g
+            NATURAL JOIN Book bk
+            WHERE b.ReturnDate IS NULL
+            AND g.GenreName IN ('Comedy', 'Horror')
+
+
+3. Display the book titles returned within a week, published by the 'Publisher 1'
+SELECT 
+                bk.Title AS "Book Title",
+                b.BorrowDate,
+                b.ReturnDate
+            FROM Borrowing b
+            NATURAL JOIN Book bk
+            NATURAL JOIN PublishedBy pb
+            NATURAL JOIN Publisher p
+            WHERE p.Name = 'Publisher 1'
+            AND b.ReturnDate IS NOT NULL
+            AND b.ReturnDate - b.BorrowDate <= 7
+
+4. Display the genre, title of the book whose more than 1 copy have been borrowed
+SELECT 
+                g.GenreName AS Genre,
+                bk.Title AS "Book Title",
+                COUNT(b.BorrowID) AS "Borrow Count"
+            FROM Borrowing b
+            NATURAL JOIN BelongsToGenre btg
+            NATURAL JOIN Genre g
+            NATURAL JOIN Book bk
+            GROUP BY g.GenreName, bk.Title
+            HAVING COUNT(b.BorrowID) > 1
+
+
+5. Display authors with their favourite genres. A genre is favourite to the author if he/she has written more than 1 book in the same genre.
+SELECT 
+                FirstName || ' ' || LastName AS "Author Name",
+                GenreName AS "Favourite Genre",
+                COUNT(ISBN) AS "Book Count"
+            FROM AuthoredBy 
+            NATURAL JOIN Author 
+            NATURAL JOIN Book 
+            NATURAL JOIN BelongsToGenre  
+            NATURAL JOIN Genre  
+            GROUP BY AuthorID, FirstName, LastName, GenreID, GenreName
+            HAVING COUNT(ISBN) > 1
+
+
+6. Display the author name, book title, book age of all the books that have aged more than 5 years. Book Age is the number of years it has passed since the books first published.
+
+SELECT 
+                a.FirstName || ' ' || a.LastName AS "Author Name",
+                b.Title AS "Book Title",
+                pb.Year AS "Published Year",
+                EXTRACT(YEAR FROM SYSDATE) - pb.Year AS "Book Age"
+            FROM AuthoredBy ab
+            NATURAL JOIN Author a
+            NATURAL JOIN Book b
+            NATURAL JOIN PublishedBy pb
+            WHERE EXTRACT(YEAR FROM SYSDATE) - pb.Year > 5
+
+7. Display the author name, genre name, book title, borrower name of all the books that have been borrowed and returned.
+SELECT 
+                a.FirstName || ' ' || a.LastName AS "Author Name",
+                g.GenreName AS "Genre Name",
+                b.Title AS "Book Title",
+                m.FirstName || ' ' || m.LastName AS "Borrower Name"
+            FROM Borrowing br
+            JOIN Member m ON br.MEMBERID = m.MEMBERID
+            JOIN Book b ON br.ISBN = b.ISBN
+            JOIN AuthoredBy ab ON b.ISBN = ab.ISBN
+            JOIN Author a ON ab.AuthorID = a.AuthorID
+            JOIN BelongsToGenre btg ON b.ISBN = btg.ISBN
+            JOIN Genre g ON btg.GenreID = g.GenreID
+            WHERE br.ReturnDate IS NOT NULL
+
+8. Rank the popularity of the genre by the amount of the books borrowed under the genre
+SELECT 
+                g.GenreName AS "Genre Name",
+                COUNT(b.BorrowID) AS "Total Borrowed",
+                RANK() OVER (ORDER BY COUNT(b.BorrowID) DESC) AS "Popularity Rank"
+            FROM Borrowing b
+            JOIN Book bk ON b.ISBN = bk.ISBN
+            JOIN BelongsToGenre btg ON bk.ISBN = btg.ISBN
+            JOIN Genre g ON btg.GenreID = g.GenreID
+            GROUP BY g.GenreName
+            ORDER BY "Popularity Rank"
+
+9. Which book genre is the most popular among teenagers
+SELECT * FROM (
+                SELECT 
+                    g.GenreName AS "Genre Name",
+                    COUNT(br.BorrowID) AS "Total Borrowed",
+                    RANK() OVER (ORDER BY COUNT(br.BorrowID) DESC) AS "Popularity Rank" 
+                FROM Borrowing br
+                NATURAL JOIN BelongsToGenre btg 
+                NATURAL JOIN Genre g 
+                NATURAL JOIN Member m 
+                WHERE m.Age BETWEEN 13 AND 19
+                GROUP BY g.GenreName
+            ) WHERE ROWNUM = 1
+
+
+10. Display the book title along with the borrower who returned the book after keeping it for the longest period of time.
+SELECT * FROM (
+                SELECT 
+                    b.Title AS "Book Title",
+                    m.FirstName || ' ' || m.LastName AS "Borrower Name",
+                    (br.ReturnDate - br.BorrowDate) AS "Days Borrowed"
+                FROM Borrowing br
+                JOIN Book b ON br.ISBN = b.ISBN
+                JOIN Member m ON br.MEMBERID = m.MEMBERID
+                WHERE br.ReturnDate IS NOT NULL
+                AND (br.ReturnDate - br.BorrowDate) = (
+                    SELECT MAX(br2.ReturnDate - br2.BorrowDate)
+                    FROM Borrowing br2
+                    WHERE br2.ISBN = br.ISBN
+                )
+                ORDER BY "Days Borrowed" DESC
+            ) WHERE ROWNUM = 1
